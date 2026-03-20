@@ -117,9 +117,18 @@ class PDFToDocxConverter:
             # --- Etapa 1: Conversão com pdf2docx (Preserva layout) ---
             cv = Converter(str(pdf_path))
             
-            # Configuração otimizada para detectar estrutura de tabelas
-            # connected_border=False ajuda a detectar linhas que não se tocam
-            cv.convert(str(docx_path), start=0, end=None, connected_border=False)
+            # COMBINAÇÃO FINAL:
+            # 1. connected_border=False: Permite tabelas com linhas incompletas
+            # 2. Tolerâncias ALTAS: Força o agrupamento de linhas "soltas" em uma tabela única
+            # 3. Pós-processamento (abaixo): Pinta a borda de tudo que foi detectado
+            cv.convert(str(docx_path), start=0, end=None,
+                connected_border=False, 
+                min_line_len=1,            # Pega qualquer segmento de linha
+                intersection_tolerance=20, # Alta tolerância para cantos que não se tocam (gap do CSS)
+                join_tolerance=20,         # Une linhas próximas vertical/horizontalmente
+                snap_tolerance=6,          # Alinha linhas levemente desalinhadas (comum em HTML->PDF)
+                line_overlap_threshold=0.1 # Considera intersecção mesmo com pouco overlap
+            )
             cv.close()
             
             # --- Etapa 2: Pós-processamento com python-docx (Força bordas) ---

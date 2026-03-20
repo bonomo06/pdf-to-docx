@@ -96,7 +96,8 @@ class PDFToDocxConverter:
             logger.info(f"Iniciando conversão: {pdf_filename} -> {docx_filename}")
             
             cv = Converter(str(pdf_path))
-            cv.convert(str(docx_path))
+            # Ajustes para melhorar detecção de tabelas e bordas
+            cv.convert(str(docx_path), start=0, end=None, connected_border=False)
             cv.close()
             
             # Lê o DOCX resultante

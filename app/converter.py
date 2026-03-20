@@ -10,10 +10,8 @@ import logging
 from pathlib import Path
 from typing import BinaryIO
 
-import pdfplumber
+from pdf2docx import Converter
 from docx import Document
-from docx.shared import Pt
-from docx.oxml.ns import qn
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +23,8 @@ class PDFConverterError(Exception):
 
 class PDFToDocxConverter:
     """
-    Classe para conversão de PDF para DOCX usando pdfplumber + python-docx.
-    Focado em extração de tabelas com bordas visíveis.
+    Classe para conversão de PDF para DOCX.
+    Usa pdf2docx para layout e python-docx para forçar bordas.
     """
     
     # Magic bytes para validação de PDF
@@ -67,6 +65,25 @@ class PDFToDocxConverter:
             return False
         return content[:4] == self.PDF_MAGIC_BYTES
     
+    def _apply_table_borders(self, docx_path: Path) -> None:
+        """
+        Força a aplicação de bordas em todas as tabelas do DOCX gerado.
+        Correção para PDFs onde pdf2docx detecta a tabela mas não renderiza as linhas.
+        """
+        try:
+            doc = Document(str(docx_path))
+            
+            # Itera sobre todas as tabelas e força o estilo 'Table Grid'
+            # Isso aplica bordas pretas padrão em todas as células
+            for table in doc.tables:
+                table.style = 'Table Grid'
+                
+            doc.save(str(docx_path))
+            logger.info("Bordas de tabela aplicadas com sucesso via pós-processamento")
+            
+        except Exception as e:
+            logger.warning(f"Não foi possível aplicar bordas nas tabelas: {e}")
+
     async def convert_from_bytes(self, pdf_content: bytes) -> bytes:
         """
         Converte PDF de bytes para DOCX.
@@ -76,6 +93,9 @@ class PDFToDocxConverter:
             
         Returns:
             Conteúdo do DOCX em bytes
+            
+        Raises:
+            PDFConverterError: Se a conversão falhar
         """
         # Valida o conteúdo do PDF
         if not self._validate_pdf_content(pdf_content):
@@ -92,54 +112,19 @@ class PDFToDocxConverter:
             # Escreve o PDF temporário
             pdf_path.write_bytes(pdf_content)
             
-            logger.info(f"Iniciando conversão (pdfplumber): {pdf_filename} -> {docx_filename}")
+            logger.info(f"Iniciando conversão: {pdf_filename} -> {docx_filename}")
             
-            # --- Início da lógica pdfplumber ---
-            doc = Document()
+            # --- Etapa 1: Conversão com pdf2docx (Preserva layout) ---
+            cv = Converter(str(pdf_path))
             
-            # Tenta abrir o PDF e extrair tabelas
-            with pdfplumber.open(str(pdf_path)) as pdf:
-                for page in pdf.pages:
-                    # Extrai tabelas da página
-                    # table_settings pode ser ajustado se necessário (vertical_strategy, horizontal_strategy)
-                    tables = page.extract_tables()
-                    
-                    if not tables:
-                        # Fallback: se não achar tabela, tenta pegar o texto puro
-                        text = page.extract_text()
-                        if text:
-                            doc.add_paragraph(text)
-                        continue
-
-                    for table_data in tables:
-                        if not table_data:
-                            continue
-                            
-                        rows = len(table_data)
-                        # Garante número de colunas consistente
-                        cols = max(len(row) for row in table_data) if rows > 0 else 0
-                        
-                        if rows == 0 or cols == 0:
-                            continue
-
-                        # Cria tabela no docx
-                        table = doc.add_table(rows=rows, cols=cols)
-                        table.style = 'Table Grid'  # FORÇA bordas visíveis
-                        
-                        for i, row in enumerate(table_data):
-                            for j, cell_text in enumerate(row):
-                                # Previne index error se a linha for menor que o max de colunas
-                                if j < len(table.rows[i].cells):
-                                    cell = table.rows[i].cells[j]
-                                    cell.text = cell_text or ""
-                    
-                    # Adiciona quebra de página entre páginas do PDF, se não for a última
-                    if page.page_number < len(pdf.pages):
-                        doc.add_page_break()
-
-            # Salva o arquivo DOCX
-            doc.save(str(docx_path))
-            # --- Fim da lógica pdfplumber ---
+            # Configuração otimizada para detectar estrutura de tabelas
+            # connected_border=False ajuda a detectar linhas que não se tocam
+            cv.convert(str(docx_path), start=0, end=None, connected_border=False)
+            cv.close()
+            
+            # --- Etapa 2: Pós-processamento com python-docx (Força bordas) ---
+            if docx_path.exists():
+                self._apply_table_borders(docx_path)
             
             # Lê o DOCX resultante
             if not docx_path.exists():

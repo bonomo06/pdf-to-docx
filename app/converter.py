@@ -96,8 +96,14 @@ class PDFToDocxConverter:
             logger.info(f"Iniciando conversão: {pdf_filename} -> {docx_filename}")
             
             cv = Converter(str(pdf_path))
-            # Ajustes para melhorar detecção de tabelas e bordas
-            cv.convert(str(docx_path), start=0, end=None, connected_border=False)
+            # Parâmetros ajustados para PDFs gerados de HTML (ex: Gotenberg)
+            # Aumenta tolerância para linhas desenhadas via CSS que podem não se tocar perfeitamente
+            cv.convert(str(docx_path), start=0, end=None,
+                       min_line_len=1,           # Detecta linhas curtas
+                       intersection_tolerance=10, # Tolerância para cruzamento de linhas
+                       join_tolerance=10,         # Tolerância para unir segmentos próximos
+                       snap_tolerance=4          # Tolerância para alinhamento (snap)
+            )
             cv.close()
             
             # Lê o DOCX resultante

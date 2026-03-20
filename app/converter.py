@@ -96,13 +96,21 @@ class PDFToDocxConverter:
             logger.info(f"Iniciando conversão: {pdf_filename} -> {docx_filename}")
             
             cv = Converter(str(pdf_path))
-            # Parâmetros ajustados para PDFs gerados de HTML (ex: Gotenberg)
-            # Aumenta tolerância para linhas desenhadas via CSS que podem não se tocar perfeitamente
+            # Parâmetros avançados sugeridos para tabelas complexas (Gotenberg/HTML)
             cv.convert(str(docx_path), start=0, end=None,
-                       min_line_len=1,           # Detecta linhas curtas
-                       intersection_tolerance=10, # Tolerância para cruzamento de linhas
-                       join_tolerance=10,         # Tolerância para unir segmentos próximos
-                       snap_tolerance=4          # Tolerância para alinhamento (snap)
+                # Detecção de linhas
+                min_line_len=1,
+                line_overlap_threshold=0.1,
+                line_break_free_space_ratio=0.05,
+                
+                # Tolerâncias de geometria
+                intersection_tolerance=10,
+                join_tolerance=10,
+                snap_tolerance=4,
+                
+                # Detecção de tabela
+                float_image_ignorable_gap=5
+                # cell_size_tolerance=0.05  # Removido por precaução se não suportado
             )
             cv.close()
             
